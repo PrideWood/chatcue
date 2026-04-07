@@ -1,0 +1,60 @@
+const demoTranscript = [
+  {
+    id: 1,
+    start: 0.5,
+    end: 2.8,
+    speaker: 'A',
+    text: 'Hey, are you free tonight?',
+    translation: '你今晚有空吗？',
+  },
+  {
+    id: 2,
+    start: 3.0,
+    end: 4.4,
+    speaker: 'B',
+    text: 'Maybe. Why?',
+    translation: '可能吧，怎么了？',
+  },
+  {
+    id: 3,
+    start: 4.8,
+    end: 8.0,
+    speaker: 'A',
+    text: 'There is a small live jazz show downtown.',
+    translation: '市中心今晚有一场小型现场爵士演出。',
+  },
+  {
+    id: 4,
+    start: 8.3,
+    end: 11.2,
+    speaker: 'B',
+    text: 'That sounds nice. What time does it start?',
+    translation: '听起来不错。几点开始？',
+  },
+  {
+    id: 5,
+    start: 11.6,
+    end: 14.8,
+    speaker: 'A',
+    text: 'At seven thirty. We can grab dinner before that.',
+    translation: '七点半开始。我们可以先去吃个晚饭。',
+  },
+  {
+    id: 6,
+    start: 15.2,
+    end: 17.6,
+    speaker: 'B',
+    text: 'Okay, text me the address later.',
+    translation: '好啊，晚点把地址发我。',
+  },
+  {
+    id: 7,
+    start: 18.0,
+    end: 20.1,
+    speaker: 'A',
+    text: 'Perfect. See you tonight.',
+    translation: '太好了，晚上见。',
+  },
+];
+
+export default demoTranscript;
