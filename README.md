@@ -21,6 +21,6 @@ The production build is written to `dist/`.
 
 This project is ready for GitHub Pages deployment through GitHub Actions. The workflow lives at `.github/workflows/deploy.yml` and runs automatically when changes are pushed to `main`.
 
-For GitHub project pages, Vite needs a repository subpath such as `/<repo-name>/`. The current `vite.config.js` reads `GITHUB_REPOSITORY` during the GitHub Actions build and automatically sets the correct `base` path. Local development keeps `base` as `/`.
+This repository is configured for the custom domain `chatcue.dacnote.com`, so Vite uses `base: '/'`. The `public/CNAME` file is copied into `dist/` during builds so GitHub Pages keeps the custom domain setting.
 
 In the GitHub repository settings, go to **Settings → Pages**, set **Build and deployment → Source** to **GitHub Actions**, then push to `main`.
