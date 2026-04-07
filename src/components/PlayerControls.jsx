@@ -15,12 +15,19 @@ function PlayerControls({
   onModeChange,
   onDecreaseBubbleFontSize,
   onIncreaseBubbleFontSize,
+  onStartExport,
+  onStopExport,
+  onExportSrt,
+  onExportJson,
   audioFileName,
   bubbleFontSize,
   bubbleFontSizeMin,
   bubbleFontSizeMax,
+  isExporting,
+  exportStatus,
   sendDisabled,
   undoDisabled,
+  subtitleExportDisabled,
 }) {
   return (
     <div className="control-panel">
@@ -41,8 +48,8 @@ function PlayerControls({
           Reset
         </button>
         <label className="tool-button audio-upload">
-          <span>Upload Audio</span>
-          <input type="file" accept="audio/*" onChange={onAudioUpload} />
+          <span>Upload Media</span>
+          <input type="file" accept="audio/*,video/*" onChange={onAudioUpload} />
         </label>
       </div>
 
@@ -104,7 +111,36 @@ function PlayerControls({
         <span>{formatTime(duration)}</span>
       </div>
 
-      <div className="audio-meta">Current audio: {audioFileName}</div>
+      <div className="audio-meta">Current media: {audioFileName}</div>
+
+      <div className="export-row">
+        <div className="export-actions">
+          <button
+            type="button"
+            className="tool-button export-button"
+            onClick={isExporting ? onStopExport : onStartExport}
+          >
+            {isExporting ? 'Stop Record' : 'Start Record'}
+          </button>
+          <button
+            type="button"
+            className="tool-button export-button"
+            onClick={onExportSrt}
+            disabled={subtitleExportDisabled}
+          >
+            Export SRT
+          </button>
+          <button
+            type="button"
+            className="tool-button export-button"
+            onClick={onExportJson}
+            disabled={subtitleExportDisabled}
+          >
+            Export JSON
+          </button>
+        </div>
+        <span className="export-status">{exportStatus}</span>
+      </div>
     </div>
   );
 }
