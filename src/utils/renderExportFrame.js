@@ -6,7 +6,7 @@ const PREVIEW_HEIGHT = 768;
 const EXPORT_SCALE = EXPORT_WIDTH / PREVIEW_WIDTH;
 
 const COLORS = {
-  background: '#f3f4f6',
+  background: '#eceef1',
   title: '#14213d',
   speaker: '#6d7887',
   leftBubble: '#ffffff',
@@ -120,7 +120,11 @@ function getTextWidth(ctx, lines, font) {
 }
 
 export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  if (!ctx) {
+    return;
+  }
 
   if (canvas.width !== EXPORT_WIDTH) {
     canvas.width = EXPORT_WIDTH;
@@ -166,6 +170,8 @@ export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
   layout.bubbleMaxWidth = layout.contentWidth * 0.82;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
   ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
 
@@ -199,6 +205,12 @@ export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
   }));
 
   const totalHeight = measuredMessages.reduce((sum, item) => sum + item.metrics.totalHeight, 0);
+
+  if (measuredMessages.length === 0) {
+    return;
+  }
+
+  const visibleListHeight = listBottom - listTop;
   let cursorY = Math.min(listTop, listBottom - totalHeight);
 
   ctx.save();
@@ -274,9 +286,11 @@ export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
 
   ctx.restore();
 
-  const fade = ctx.createLinearGradient(0, shellTop, 0, shellTop + 53);
-  fade.addColorStop(0, COLORS.background);
-  fade.addColorStop(1, 'rgba(243, 244, 246, 0)');
-  ctx.fillStyle = fade;
-  ctx.fillRect(0, shellTop, PREVIEW_WIDTH, 53);
+  if (totalHeight > visibleListHeight) {
+    const fade = ctx.createLinearGradient(0, shellTop, 0, shellTop + 53);
+    fade.addColorStop(0, COLORS.background);
+    fade.addColorStop(1, 'rgba(236, 238, 241, 0)');
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, shellTop, PREVIEW_WIDTH, 53);
+  }
 }

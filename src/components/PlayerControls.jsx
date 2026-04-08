@@ -17,6 +17,7 @@ function PlayerControls({
   onIncreaseBubbleFontSize,
   onStartExport,
   onStopExport,
+  onDiscardExport,
   onExportSrt,
   onExportJson,
   audioFileName,
@@ -30,6 +31,7 @@ function PlayerControls({
   subtitleExportDisabled,
 }) {
   const isRecordingSessionActive = recordingState !== 'idle';
+  const canDiscardRecording = recordingState === 'recording' || recordingState === 'paused';
 
   return (
     <div className="control-panel">
@@ -124,6 +126,14 @@ function PlayerControls({
             disabled={recordingState === 'finalizing'}
           >
             {isRecordingSessionActive ? 'Finish Record' : 'Start Record'}
+          </button>
+          <button
+            type="button"
+            className="tool-button export-button discard-button"
+            onClick={onDiscardExport}
+            disabled={!canDiscardRecording}
+          >
+            Discard
           </button>
           <button
             type="button"

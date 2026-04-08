@@ -1,7 +1,8 @@
 :root {
+  --surface-background: #eceef1;
   font-family: "Avenir Next", "PingFang SC", "Helvetica Neue", sans-serif;
   color: #14213d;
-  background: #f3f4f6;
+  background: var(--surface-background);
   color-scheme: light;
 }
 
@@ -13,6 +14,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: var(--surface-background);
 }
 
 button,
@@ -80,13 +82,13 @@ button:disabled {
   padding: 14px;
   border: 1px solid #d7dde6;
   border-radius: 22px;
-  background: #f3f4f6;
+  background: var(--surface-background);
 }
 
 .control-panel {
   padding: 0;
   border-radius: 18px;
-  background: #f3f4f6;
+  background: var(--surface-background);
   border: none;
 }
 
@@ -177,7 +179,7 @@ button:disabled {
 
 .export-actions {
   display: grid;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: repeat(4, max-content);
   gap: 8px;
 }
 
@@ -253,7 +255,7 @@ button:disabled {
   margin-top: 12px;
   padding: 0;
   border-radius: 18px;
-  background: #f3f4f6;
+  background: var(--surface-background);
   border: none;
 }
 
@@ -297,7 +299,7 @@ button:disabled {
   resize: vertical;
   border-radius: 20px;
   border: 1px solid #d0d8e4;
-  background: #f3f4f6;
+  background: var(--surface-background);
   color: #14213d;
   line-height: 1.6;
 }
@@ -318,7 +320,7 @@ button:disabled {
 .preview-card {
   padding: 10px 12px;
   border-radius: 14px;
-  background: #f3f4f6;
+  background: var(--surface-background);
   border: 1px solid #d7dde6;
 }
 
@@ -383,7 +385,7 @@ button:disabled {
   padding: 12px 14px;
   border-radius: 16px;
   border: 1px solid #d0d8e4;
-  background: #f3f4f6;
+  background: var(--surface-background);
   color: #14213d;
 }
 
@@ -400,7 +402,7 @@ button:disabled {
   overflow-y: auto;
   padding: 41px 31px 31px;
   border-radius: 34px;
-  background: #f3f4f6;
+  background: var(--surface-background);
   scrollbar-width: none;
   -ms-overflow-style: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 53px, black 100%);
@@ -415,7 +417,7 @@ button:disabled {
   width: 100%;
   padding: 26px;
   border-radius: 41px;
-  background: #f3f4f6;
+  background: var(--surface-background);
   aspect-ratio: 3 / 4;
   display: flex;
   flex-direction: column;
@@ -479,11 +481,15 @@ button:disabled {
   pointer-events: none;
 }
 
+.recording-indicator-paused {
+  color: #ea580c;
+}
+
 .chat-title-bar {
   margin-bottom: 22px;
   padding: 24px 29px;
   border-radius: 26px;
-  background: #f3f4f6;
+  background: var(--surface-background);
   text-align: center;
 }
 
@@ -597,7 +603,7 @@ button:disabled {
   justify-content: center;
   border: 1px solid #d0d8e4;
   border-radius: 999px;
-  background: #f3f4f6;
+  background: var(--surface-background);
   color: #14213d;
   text-decoration: none;
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;

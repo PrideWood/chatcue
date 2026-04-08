@@ -26,17 +26,28 @@ const DEFAULT_BUBBLE_FONT_SIZE = 22;
 const MIN_BUBBLE_FONT_SIZE = 18;
 const MAX_BUBBLE_FONT_SIZE = 32;
 const BUBBLE_FONT_SIZE_STEP = 2;
+const RECORDING_FRAME_RATE = 30;
+const RECORDING_VIDEO_BITS_PER_SECOND = 36_000_000;
+const RECORDING_AUDIO_BITS_PER_SECOND = 256_000;
 
-function getSupportedVideoMimeType() {
+function getSupportedVideoMimeType(hasAudio = false) {
   if (typeof MediaRecorder === 'undefined') {
     return '';
   }
 
-  return [
+  const candidates = hasAudio ? [
     'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp9',
     'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp8',
     'video/webm',
-  ].find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || '';
+  ] : [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ];
+
+  return candidates.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || '';
 }
 
 function buildExportFileName(sessionTitle) {
@@ -340,13 +351,25 @@ function App() {
   const togglePlay = async () => {
     const audio = audioRef.current;
 
-    if (!audio || !audioSource) {
+    if (!audio || !(audio.currentSrc || audio.src)) {
       return;
     }
 
     if (audio.paused) {
+      if (recordingState === 'paused') {
+        const resumed = resumeExportRecording();
+
+        if (!resumed) {
+          return;
+        }
+      }
+
       await audio.play();
       return;
+    }
+
+    if (recordingState === 'recording') {
+      pauseExportRecording();
     }
 
     audio.pause();
@@ -481,18 +504,27 @@ function App() {
       return false;
     }
 
-    const mimeType = getSupportedVideoMimeType();
-    const canvasStream = canvas.captureStream(30);
     const audio = audioRef.current;
     const audioStream = audio?.captureStream?.() || audio?.mozCaptureStream?.();
+    const mimeType = getSupportedVideoMimeType(Boolean(audioStream));
+    const canvasStream = canvas.captureStream(RECORDING_FRAME_RATE);
     const stream = new MediaStream([
       ...canvasStream.getVideoTracks(),
       ...(audioStream ? audioStream.getAudioTracks() : []),
     ]);
     let recorder;
 
+    const recorderOptions = {
+      videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND,
+      audioBitsPerSecond: RECORDING_AUDIO_BITS_PER_SECOND,
+    };
+
+    if (mimeType) {
+      recorderOptions.mimeType = mimeType;
+    }
+
     try {
-      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorder = new MediaRecorder(stream, recorderOptions);
     } catch (error) {
       stream.getTracks().forEach((track) => track.stop());
       setExportStatus('Unable to start recorder');
@@ -537,7 +569,7 @@ function App() {
         return;
       }
 
-      const rawBlob = new Blob(exportChunksRef.current, { type: mimeType || 'video/webm' });
+      const rawBlob = new Blob(exportChunksRef.current, { type: recorder.mimeType || mimeType || 'video/webm' });
       const fileName = buildExportFileName(sessionTitle);
       let finalBlob = rawBlob;
 
@@ -572,7 +604,10 @@ function App() {
     recorder.start(1000);
     exportRecorderRef.current = recorder;
     setRecordingState('recording');
-    setExportStatus(audioStream ? 'Recording video + audio...' : 'Recording video only...');
+    const actualVideoBitrate = recorder.videoBitsPerSecond || RECORDING_VIDEO_BITS_PER_SECOND;
+    setExportStatus(
+      `${audioStream ? 'Recording video + audio' : 'Recording video only'} · ${recorder.mimeType || 'browser webm'} · ${Math.round(actualVideoBitrate / 1_000_000)} Mbps`,
+    );
     return true;
   };
 
@@ -587,6 +622,29 @@ function App() {
     exportRecorderRef.current.stop();
     setRecordingState('finalizing');
     setExportStatus('Preparing download...');
+  };
+
+  const discardExportRecording = () => {
+    const recorder = exportRecorderRef.current;
+
+    if (!recorder || recorder.state === 'inactive' || recordingState === 'finalizing') {
+      return;
+    }
+
+    exportShouldDownloadRef.current = false;
+    exportChunksRef.current = [];
+    recordingElapsedMsRef.current = 0;
+    recordingDurationMsRef.current = 0;
+    recordingStartedAtRef.current = null;
+    recorder.stop();
+    setRecordingState('idle');
+    setExportStatus('Recording discarded. Ready to start again.');
+
+    const audio = audioRef.current;
+
+    if (audio) {
+      audio.pause();
+    }
   };
 
   const pauseExportRecording = () => {
@@ -604,7 +662,7 @@ function App() {
     pauseRecordingClock();
     recorder.pause();
     setRecordingState('paused');
-    setExportStatus('Recording paused. Press Space to resume or Finish Record to save.');
+    setExportStatus('Recording paused. Press Space to resume, or E / Finish Record to save.');
   };
 
   const resumeExportRecording = () => {
@@ -629,14 +687,14 @@ function App() {
   const playMedia = async () => {
     const audio = audioRef.current;
 
-    if (!audio || !audioSource || !audio.paused) {
+    if (!audio || !(audio.currentSrc || audio.src) || !audio.paused) {
       return;
     }
 
     await audio.play();
   };
 
-  const toggleRecordAndPlayback = async () => {
+  const startRecordAndPlayback = async () => {
     if (recordingState === 'finalizing') {
       return;
     }
@@ -655,47 +713,22 @@ function App() {
       }
       return;
     }
-
-    if (recordingState === 'recording') {
-      pauseExportRecording();
-
-      const audio = audioRef.current;
-
-      if (audio) {
-        audio.pause();
-      }
-      return;
-    }
-
-    if (recordingState === 'paused') {
-      const resumed = resumeExportRecording();
-
-      if (!resumed) {
-        return;
-      }
-
-      try {
-        await playMedia();
-      } catch (error) {
-        setExportStatus('Recording resumed, but media playback was blocked');
-      }
-    }
-  };
-
-  const startRecordOnly = () => {
-    startExportRecording();
   };
 
   const handleRecordButtonClick = () => {
     if (recordingState === 'idle') {
-      startRecordOnly();
+      void startRecordAndPlayback();
       return;
     }
 
-    finishExportRecording();
+    finishRecordAndPause();
   };
 
   const finishRecordAndPause = () => {
+    if (recordingState === 'idle' || recordingState === 'finalizing') {
+      return;
+    }
+
     finishExportRecording();
 
     const audio = audioRef.current;
@@ -734,13 +767,21 @@ function App() {
         return;
       }
 
-      if (event.code === 'Space') {
+      if (event.code === 'Space' || event.key === ' ') {
         event.preventDefault();
-        void toggleRecordAndPlayback();
+        void togglePlay();
         return;
       }
 
-      if (event.key === 'Enter' && isRecordingSessionActive) {
+      if (event.key.toLowerCase() === 'r' && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        if (recordingState === 'idle') {
+          void startRecordAndPlayback();
+        }
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'e' && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         finishRecordAndPause();
         return;
@@ -749,12 +790,6 @@ function App() {
       if (event.key === 'Backspace' || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z')) {
         event.preventDefault();
         undoLastMessage();
-        return;
-      }
-
-      if (event.key.toLowerCase() === 'r' && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault();
-        resetSession();
       }
     };
 
@@ -762,6 +797,7 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     bubbleFontSize,
+    audioSource,
     isRecordingSessionActive,
     pendingQueue.length,
     recordingState,
@@ -829,6 +865,7 @@ function App() {
                 onIncreaseBubbleFontSize={() => changeBubbleFontSize(1)}
                 onStartExport={handleRecordButtonClick}
                 onStopExport={handleRecordButtonClick}
+                onDiscardExport={discardExportRecording}
                 onExportSrt={exportSrt}
                 onExportJson={exportJson}
                 bubbleFontSize={bubbleFontSize}
@@ -900,10 +937,10 @@ function App() {
                 <div className="shortcut-note">
                   <span>`Left Arrow` Send Left</span>
                   <span>`Right Arrow` Send Right</span>
-                  <span>`Space` Record Play/Pause</span>
-                  <span>`Enter` Finish Record</span>
+                  <span>`Space` Play/Pause</span>
+                  <span>`R` Start Record</span>
+                  <span>`E` Finish Record</span>
                   <span>`Backspace` or `Cmd/Ctrl+Z` Undo</span>
-                  <span>`R` Reset</span>
                 </div>
 
               </div>
@@ -916,7 +953,12 @@ function App() {
               <span className="crop-marker crop-marker-top-right" aria-hidden="true" />
               <span className="crop-marker crop-marker-bottom-left" aria-hidden="true" />
               <span className="crop-marker crop-marker-bottom-right" aria-hidden="true" />
-              {isRecordingSessionActive ? <span className="recording-indicator">·REC</span> : null}
+              {recordingState === 'recording' ? (
+                <span className="recording-indicator">·REC</span>
+              ) : null}
+              {recordingState === 'paused' ? (
+                <span className="recording-indicator recording-indicator-paused">·PAUSE</span>
+              ) : null}
               <div className="chat-frame">
                 <div className="chat-title-bar">
                   <p className="chat-title">{sessionTitle || 'Untitled Session'}</p>
