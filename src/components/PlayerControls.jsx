@@ -23,12 +23,14 @@ function PlayerControls({
   bubbleFontSize,
   bubbleFontSizeMin,
   bubbleFontSizeMax,
-  isExporting,
+  recordingState,
   exportStatus,
   sendDisabled,
   undoDisabled,
   subtitleExportDisabled,
 }) {
+  const isRecordingSessionActive = recordingState !== 'idle';
+
   return (
     <div className="control-panel">
       <div className="transport-row">
@@ -118,9 +120,10 @@ function PlayerControls({
           <button
             type="button"
             className="tool-button export-button"
-            onClick={isExporting ? onStopExport : onStartExport}
+            onClick={isRecordingSessionActive ? onStopExport : onStartExport}
+            disabled={recordingState === 'finalizing'}
           >
-            {isExporting ? 'Stop Record' : 'Start Record'}
+            {isRecordingSessionActive ? 'Finish Record' : 'Start Record'}
           </button>
           <button
             type="button"

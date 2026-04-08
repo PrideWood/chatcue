@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { fixWebmDuration } from '@fix-webm-duration/fix';
 import ChatMessage from './components/ChatMessage';
 import PlayerControls from './components/PlayerControls';
 import { EXPORT_HEIGHT, EXPORT_WIDTH, renderExportFrame } from './utils/renderExportFrame';
@@ -16,6 +17,9 @@ const DEFAULT_AUDIO_SOURCE = `${import.meta.env.BASE_URL}demo-audio.wav`;
 const DEFAULT_SPEAKER_MODE = 'two';
 const DEFAULT_SESSION_TITLE = 'CET-6-2026-6-1-Conversation 1';
 const SESSION_TITLE_STORAGE_KEY = 'bubble-session-title';
+const SCRIPT_STORAGE_KEY = 'chatcue-script-text';
+const SPEAKER_MODE_STORAGE_KEY = 'chatcue-speaker-mode';
+const MEDIA_MODE_STORAGE_KEY = 'chatcue-media-mode';
 const BUBBLE_FONT_SIZE_STORAGE_KEY = 'bubble-font-size';
 const GITHUB_REPO_URL = 'https://github.com/PrideWood/chatcue';
 const DEFAULT_BUBBLE_FONT_SIZE = 22;
@@ -71,6 +75,17 @@ function downloadTextFile(content, fileName, type) {
   setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
 }
 
+function downloadBlob(blob, fileName) {
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = downloadUrl;
+  link.download = fileName;
+  link.click();
+
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
 function parseScriptText(scriptText) {
   return scriptText
     .split('\n')
@@ -103,6 +118,42 @@ function resolveOutgoingSide(requestedSide, speakerMode) {
   return requestedSide === 'right' ? 'right' : 'left';
 }
 
+function getStoredScriptText() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_SCRIPT;
+  }
+
+  const storedScript = localStorage.getItem(SCRIPT_STORAGE_KEY);
+  return storedScript === null ? DEFAULT_SCRIPT : storedScript;
+}
+
+function getStoredSpeakerMode() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_SPEAKER_MODE;
+  }
+
+  const storedMode = localStorage.getItem(SPEAKER_MODE_STORAGE_KEY);
+  return storedMode === 'single' || storedMode === 'two' ? storedMode : DEFAULT_SPEAKER_MODE;
+}
+
+function getInitialMediaSource() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_AUDIO_SOURCE;
+  }
+
+  return localStorage.getItem(MEDIA_MODE_STORAGE_KEY) === 'custom' ? '' : DEFAULT_AUDIO_SOURCE;
+}
+
+function getInitialMediaFileName() {
+  if (typeof window === 'undefined') {
+    return 'demo-audio.wav';
+  }
+
+  return localStorage.getItem(MEDIA_MODE_STORAGE_KEY) === 'custom'
+    ? 'Custom media previously used — reselect required'
+    : 'demo-audio.wav';
+}
+
 function App() {
   const audioRef = useRef(null);
   const listRef = useRef(null);
@@ -111,19 +162,23 @@ function App() {
   const exportAnimationRef = useRef(null);
   const exportChunksRef = useRef([]);
   const exportFrameStateRef = useRef(null);
+  const exportShouldDownloadRef = useRef(false);
+  const recordingStartedAtRef = useRef(null);
+  const recordingElapsedMsRef = useRef(0);
+  const recordingDurationMsRef = useRef(0);
   const uploadedAudioUrlRef = useRef(null);
-  const [scriptText, setScriptText] = useState(DEFAULT_SCRIPT);
-  const [initialQueue, setInitialQueue] = useState(() => parseScriptText(DEFAULT_SCRIPT));
-  const [pendingQueue, setPendingQueue] = useState(() => parseScriptText(DEFAULT_SCRIPT));
+  const [scriptText, setScriptText] = useState(() => getStoredScriptText());
+  const [initialQueue, setInitialQueue] = useState(() => parseScriptText(getStoredScriptText()));
+  const [pendingQueue, setPendingQueue] = useState(() => parseScriptText(getStoredScriptText()));
   const [sentMessages, setSentMessages] = useState([]);
   const [activeMessageId, setActiveMessageId] = useState(null);
-  const [audioSource, setAudioSource] = useState(DEFAULT_AUDIO_SOURCE);
-  const [audioFileName, setAudioFileName] = useState('demo-audio.wav');
+  const [audioSource, setAudioSource] = useState(() => getInitialMediaSource());
+  const [audioFileName, setAudioFileName] = useState(() => getInitialMediaFileName());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [speakerMode, setSpeakerMode] = useState(DEFAULT_SPEAKER_MODE);
-  const [isExporting, setIsExporting] = useState(false);
+  const [speakerMode, setSpeakerMode] = useState(() => getStoredSpeakerMode());
+  const [recordingState, setRecordingState] = useState('idle');
   const [exportStatus, setExportStatus] = useState(`Ready: ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`);
   const [bubbleFontSize, setBubbleFontSize] = useState(() => {
     if (typeof window === 'undefined') {
@@ -145,6 +200,7 @@ function App() {
 
   const queueStarted = sentMessages.length > 0 || pendingQueue.length !== initialQueue.length;
   const nextMessage = pendingQueue[0] || null;
+  const isRecordingSessionActive = recordingState !== 'idle';
 
   const queueSummary = useMemo(
     () => ({
@@ -193,6 +249,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem(SESSION_TITLE_STORAGE_KEY, sessionTitle);
   }, [sessionTitle]);
+
+  useEffect(() => {
+    localStorage.setItem(SCRIPT_STORAGE_KEY, scriptText);
+  }, [scriptText]);
+
+  useEffect(() => {
+    localStorage.setItem(SPEAKER_MODE_STORAGE_KEY, speakerMode);
+  }, [speakerMode]);
 
   useEffect(() => {
     localStorage.setItem(BUBBLE_FONT_SIZE_STORAGE_KEY, String(bubbleFontSize));
@@ -267,6 +331,7 @@ function App() {
 
     setAudioSource(nextSource);
     setAudioFileName(file.name);
+    localStorage.setItem(MEDIA_MODE_STORAGE_KEY, 'custom');
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
@@ -275,7 +340,7 @@ function App() {
   const togglePlay = async () => {
     const audio = audioRef.current;
 
-    if (!audio) {
+    if (!audio || !audioSource) {
       return;
     }
 
@@ -378,13 +443,34 @@ function App() {
     );
   };
 
+  const getActiveRecordingDurationMs = () => {
+    const activeSegmentMs = recordingStartedAtRef.current
+      ? performance.now() - recordingStartedAtRef.current
+      : 0;
+
+    return Math.max(1, Math.round(recordingElapsedMsRef.current + activeSegmentMs));
+  };
+
+  const pauseRecordingClock = () => {
+    if (!recordingStartedAtRef.current) {
+      return;
+    }
+
+    recordingElapsedMsRef.current += performance.now() - recordingStartedAtRef.current;
+    recordingStartedAtRef.current = null;
+  };
+
+  const resumeRecordingClock = () => {
+    recordingStartedAtRef.current = performance.now();
+  };
+
   const startExportRecording = () => {
     if (exportRecorderRef.current && exportRecorderRef.current.state !== 'inactive') {
       return false;
     }
 
     if (typeof MediaRecorder === 'undefined') {
-      setExportStatus('Export is not supported in this browser');
+      setExportStatus('Recording is not supported in this browser');
       return false;
     }
 
@@ -409,11 +495,15 @@ function App() {
       recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     } catch (error) {
       stream.getTracks().forEach((track) => track.stop());
-      setExportStatus('Unable to start export recorder');
+      setExportStatus('Unable to start recorder');
       return false;
     }
 
     exportChunksRef.current = [];
+    exportShouldDownloadRef.current = false;
+    recordingElapsedMsRef.current = 0;
+    recordingDurationMsRef.current = 0;
+    resumeRecordingClock();
 
     const drawLoop = () => {
       if (exportFrameStateRef.current) {
@@ -428,7 +518,7 @@ function App() {
       }
     });
 
-    recorder.addEventListener('stop', () => {
+    recorder.addEventListener('stop', async () => {
       if (exportAnimationRef.current) {
         cancelAnimationFrame(exportAnimationRef.current);
         exportAnimationRef.current = null;
@@ -436,19 +526,41 @@ function App() {
 
       stream.getTracks().forEach((track) => track.stop());
 
-      const blob = new Blob(exportChunksRef.current, { type: mimeType || 'video/webm' });
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      if (!exportShouldDownloadRef.current) {
+        exportRecorderRef.current = null;
+        exportChunksRef.current = [];
+        recordingElapsedMsRef.current = 0;
+        recordingDurationMsRef.current = 0;
+        recordingStartedAtRef.current = null;
+        setRecordingState('idle');
+        setExportStatus(`Ready: ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`);
+        return;
+      }
 
-      link.href = downloadUrl;
-      link.download = buildExportFileName(sessionTitle);
-      link.click();
+      const rawBlob = new Blob(exportChunksRef.current, { type: mimeType || 'video/webm' });
+      const fileName = buildExportFileName(sessionTitle);
+      let finalBlob = rawBlob;
 
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      try {
+        setExportStatus('Fixing WebM metadata...');
+        finalBlob = await fixWebmDuration(rawBlob, recordingDurationMsRef.current, { logger: false });
+      } catch (error) {
+        setExportStatus('Metadata fix failed. Downloading raw WebM...');
+      }
+
+      downloadBlob(finalBlob, fileName);
       exportRecorderRef.current = null;
       exportChunksRef.current = [];
-      setIsExporting(false);
-      setExportStatus(`Saved ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`);
+      exportShouldDownloadRef.current = false;
+      recordingElapsedMsRef.current = 0;
+      recordingDurationMsRef.current = 0;
+      recordingStartedAtRef.current = null;
+      setRecordingState('idle');
+      setExportStatus(
+        finalBlob === rawBlob
+          ? `Saved raw ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`
+          : `Saved fixed ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`,
+      );
     });
 
     renderExportFrame(canvas, exportFrameStateRef.current || {
@@ -459,42 +571,132 @@ function App() {
     drawLoop();
     recorder.start(1000);
     exportRecorderRef.current = recorder;
-    setIsExporting(true);
+    setRecordingState('recording');
     setExportStatus(audioStream ? 'Recording video + audio...' : 'Recording video only...');
     return true;
   };
 
-  const stopExportRecording = () => {
+  const finishExportRecording = () => {
     if (!exportRecorderRef.current || exportRecorderRef.current.state === 'inactive') {
       return;
     }
 
+    exportShouldDownloadRef.current = true;
+    pauseRecordingClock();
+    recordingDurationMsRef.current = getActiveRecordingDurationMs();
     exportRecorderRef.current.stop();
+    setRecordingState('finalizing');
     setExportStatus('Preparing download...');
   };
 
-  const startExportAndPlay = async () => {
-    const exportStarted = startExportRecording();
+  const pauseExportRecording = () => {
+    const recorder = exportRecorderRef.current;
 
-    if (!exportStarted) {
+    if (!recorder || recorder.state !== 'recording') {
       return;
     }
 
+    if (typeof recorder.pause !== 'function') {
+      setExportStatus('Recorder pause is not supported in this browser.');
+      return;
+    }
+
+    pauseRecordingClock();
+    recorder.pause();
+    setRecordingState('paused');
+    setExportStatus('Recording paused. Press Space to resume or Finish Record to save.');
+  };
+
+  const resumeExportRecording = () => {
+    const recorder = exportRecorderRef.current;
+
+    if (!recorder || recorder.state !== 'paused') {
+      return false;
+    }
+
+    if (typeof recorder.resume !== 'function') {
+      setExportStatus('Recorder resume is not supported in this browser.');
+      return false;
+    }
+
+    resumeRecordingClock();
+    recorder.resume();
+    setRecordingState('recording');
+    setExportStatus('Recording resumed...');
+    return true;
+  };
+
+  const playMedia = async () => {
     const audio = audioRef.current;
 
-    if (!audio || !audio.paused) {
+    if (!audio || !audioSource || !audio.paused) {
       return;
     }
 
-    try {
-      await audio.play();
-    } catch (error) {
-      setExportStatus('Recording started, but audio playback was blocked');
+    await audio.play();
+  };
+
+  const toggleRecordAndPlayback = async () => {
+    if (recordingState === 'finalizing') {
+      return;
+    }
+
+    if (recordingState === 'idle') {
+      const exportStarted = startExportRecording();
+
+      if (!exportStarted) {
+        return;
+      }
+
+      try {
+        await playMedia();
+      } catch (error) {
+        setExportStatus('Recording started, but media playback was blocked');
+      }
+      return;
+    }
+
+    if (recordingState === 'recording') {
+      pauseExportRecording();
+
+      const audio = audioRef.current;
+
+      if (audio) {
+        audio.pause();
+      }
+      return;
+    }
+
+    if (recordingState === 'paused') {
+      const resumed = resumeExportRecording();
+
+      if (!resumed) {
+        return;
+      }
+
+      try {
+        await playMedia();
+      } catch (error) {
+        setExportStatus('Recording resumed, but media playback was blocked');
+      }
     }
   };
 
-  const stopExportAndPause = () => {
-    stopExportRecording();
+  const startRecordOnly = () => {
+    startExportRecording();
+  };
+
+  const handleRecordButtonClick = () => {
+    if (recordingState === 'idle') {
+      startRecordOnly();
+      return;
+    }
+
+    finishExportRecording();
+  };
+
+  const finishRecordAndPause = () => {
+    finishExportRecording();
 
     const audio = audioRef.current;
 
@@ -534,12 +736,13 @@ function App() {
 
       if (event.code === 'Space') {
         event.preventDefault();
-        if (isExporting) {
-          stopExportAndPause();
-          return;
-        }
+        void toggleRecordAndPlayback();
+        return;
+      }
 
-        void startExportAndPlay();
+      if (event.key === 'Enter' && isRecordingSessionActive) {
+        event.preventDefault();
+        finishRecordAndPause();
         return;
       }
 
@@ -557,7 +760,16 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isExporting, pendingQueue.length, scriptText, sentMessages.length, speakerMode]);
+  }, [
+    bubbleFontSize,
+    isRecordingSessionActive,
+    pendingQueue.length,
+    recordingState,
+    scriptText,
+    sentMessages.length,
+    sessionTitle,
+    speakerMode,
+  ]);
 
   useEffect(
     () => () => {
@@ -615,14 +827,14 @@ function App() {
                 onModeChange={setSpeakerMode}
                 onDecreaseBubbleFontSize={() => changeBubbleFontSize(-1)}
                 onIncreaseBubbleFontSize={() => changeBubbleFontSize(1)}
-                onStartExport={startExportRecording}
-                onStopExport={stopExportRecording}
+                onStartExport={handleRecordButtonClick}
+                onStopExport={handleRecordButtonClick}
                 onExportSrt={exportSrt}
                 onExportJson={exportJson}
                 bubbleFontSize={bubbleFontSize}
                 bubbleFontSizeMin={MIN_BUBBLE_FONT_SIZE}
                 bubbleFontSizeMax={MAX_BUBBLE_FONT_SIZE}
-                isExporting={isExporting}
+                recordingState={recordingState}
                 exportStatus={exportStatus}
                 sendDisabled={pendingQueue.length === 0}
                 undoDisabled={sentMessages.length === 0}
@@ -688,7 +900,8 @@ function App() {
                 <div className="shortcut-note">
                   <span>`Left Arrow` Send Left</span>
                   <span>`Right Arrow` Send Right</span>
-                  <span>`Space` Start/Stop Record + Play/Pause</span>
+                  <span>`Space` Record Play/Pause</span>
+                  <span>`Enter` Finish Record</span>
                   <span>`Backspace` or `Cmd/Ctrl+Z` Undo</span>
                   <span>`R` Reset</span>
                 </div>
@@ -703,7 +916,7 @@ function App() {
               <span className="crop-marker crop-marker-top-right" aria-hidden="true" />
               <span className="crop-marker crop-marker-bottom-left" aria-hidden="true" />
               <span className="crop-marker crop-marker-bottom-right" aria-hidden="true" />
-              {isExporting ? <span className="recording-indicator">·REC</span> : null}
+              {isRecordingSessionActive ? <span className="recording-indicator">·REC</span> : null}
               <div className="chat-frame">
                 <div className="chat-title-bar">
                   <p className="chat-title">{sessionTitle || 'Untitled Session'}</p>
@@ -724,12 +937,12 @@ function App() {
         </div>
 
         <video
-          key={audioSource}
+          key={audioSource || 'no-media'}
           ref={audioRef}
           className="media-source"
           preload="metadata"
           playsInline
-          src={audioSource}
+          src={audioSource || undefined}
         />
         <canvas
           ref={exportCanvasRef}
