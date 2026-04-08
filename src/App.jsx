@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fixWebmDuration } from '@fix-webm-duration/fix';
 import ChatMessage from './components/ChatMessage';
 import PlayerControls from './components/PlayerControls';
-import { EXPORT_HEIGHT, EXPORT_WIDTH, renderExportFrame } from './utils/renderExportFrame';
+import {
+  DEFAULT_EXPORT_RATIO,
+  EXPORT_RATIOS,
+  getExportDimensions,
+  getExportRatioConfig,
+  renderExportFrame,
+} from './utils/renderExportFrame';
 import { buildSrt, buildSubtitleJson } from './utils/subtitleExport';
 
 const DEFAULT_SCRIPT = `A: Hey, are you free tonight?
@@ -21,6 +27,7 @@ const SCRIPT_STORAGE_KEY = 'chatcue-script-text';
 const SPEAKER_MODE_STORAGE_KEY = 'chatcue-speaker-mode';
 const MEDIA_MODE_STORAGE_KEY = 'chatcue-media-mode';
 const BUBBLE_FONT_SIZE_STORAGE_KEY = 'bubble-font-size';
+const EXPORT_RATIO_STORAGE_KEY = 'chatcue-export-ratio';
 const GITHUB_REPO_URL = 'https://github.com/PrideWood/chatcue';
 const DEFAULT_BUBBLE_FONT_SIZE = 22;
 const MIN_BUBBLE_FONT_SIZE = 18;
@@ -165,6 +172,23 @@ function getInitialMediaFileName() {
     : 'demo-audio.wav';
 }
 
+function getStoredExportRatio() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_EXPORT_RATIO;
+  }
+
+  const storedRatio = localStorage.getItem(EXPORT_RATIO_STORAGE_KEY);
+  return EXPORT_RATIOS.some((ratio) => ratio.value === storedRatio) ? storedRatio : DEFAULT_EXPORT_RATIO;
+}
+
+function getViewportSize() {
+  if (typeof window === 'undefined') {
+    return { width: 1280, height: 900 };
+  }
+
+  return { width: window.innerWidth, height: window.innerHeight };
+}
+
 function App() {
   const audioRef = useRef(null);
   const listRef = useRef(null);
@@ -190,7 +214,28 @@ function App() {
   const [duration, setDuration] = useState(0);
   const [speakerMode, setSpeakerMode] = useState(() => getStoredSpeakerMode());
   const [recordingState, setRecordingState] = useState('idle');
-  const [exportStatus, setExportStatus] = useState(`Ready: ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`);
+  const [exportRatio, setExportRatio] = useState(() => getStoredExportRatio());
+  const [viewportSize, setViewportSize] = useState(() => getViewportSize());
+  const exportDimensions = useMemo(() => getExportDimensions(exportRatio), [exportRatio]);
+  const exportRatioConfig = useMemo(() => getExportRatioConfig(exportRatio), [exportRatio]);
+  const previewStageConfig = useMemo(() => getExportRatioConfig('9:16'), []);
+  const previewCropBoundaryTop = (previewStageConfig.previewHeight - exportRatioConfig.previewHeight) / 2;
+  const previewScale = useMemo(() => {
+    const verticalSafeArea = viewportSize.width <= 700 ? 56 : 96;
+    const availableHeight = Math.max(360, viewportSize.height - verticalSafeArea);
+    const availableWidth = viewportSize.width <= 980
+      ? Math.max(320, viewportSize.width - 32)
+      : 768;
+
+    return Math.min(
+      1,
+      availableWidth / previewStageConfig.previewWidth,
+      availableHeight / previewStageConfig.previewHeight,
+    );
+  }, [previewStageConfig.previewHeight, previewStageConfig.previewWidth, viewportSize.height, viewportSize.width]);
+  const [exportStatus, setExportStatus] = useState(
+    () => `Ready: ${getExportDimensions(getStoredExportRatio()).width}x${getExportDimensions(getStoredExportRatio()).height} webm`,
+  );
   const [bubbleFontSize, setBubbleFontSize] = useState(() => {
     if (typeof window === 'undefined') {
       return DEFAULT_BUBBLE_FONT_SIZE;
@@ -239,12 +284,13 @@ function App() {
       title: sessionTitle,
       messages: renderedMessages,
       bubbleFontSize,
+      exportRatio,
     };
 
     if (exportCanvasRef.current) {
       renderExportFrame(exportCanvasRef.current, exportFrameStateRef.current);
     }
-  }, [bubbleFontSize, renderedMessages, sessionTitle]);
+  }, [bubbleFontSize, exportRatio, renderedMessages, sessionTitle]);
 
   useEffect(() => {
     if (!listRef.current) {
@@ -268,6 +314,19 @@ function App() {
   useEffect(() => {
     localStorage.setItem(SPEAKER_MODE_STORAGE_KEY, speakerMode);
   }, [speakerMode]);
+
+  useEffect(() => {
+    localStorage.setItem(EXPORT_RATIO_STORAGE_KEY, exportRatio);
+  }, [exportRatio]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportSize(getViewportSize());
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(BUBBLE_FONT_SIZE_STORAGE_KEY, String(bubbleFontSize));
@@ -442,6 +501,15 @@ function App() {
     });
   };
 
+  const changeExportRatio = (nextRatio) => {
+    setExportRatio(nextRatio);
+
+    if (recordingState === 'idle') {
+      const nextDimensions = getExportDimensions(nextRatio);
+      setExportStatus(`Ready: ${nextDimensions.width}x${nextDimensions.height} webm`);
+    }
+  };
+
   const exportSrt = () => {
     if (sentMessages.length === 0) {
       return;
@@ -565,7 +633,7 @@ function App() {
         recordingDurationMsRef.current = 0;
         recordingStartedAtRef.current = null;
         setRecordingState('idle');
-        setExportStatus(`Ready: ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`);
+        setExportStatus(`Ready: ${exportDimensions.width}x${exportDimensions.height} webm`);
         return;
       }
 
@@ -590,8 +658,8 @@ function App() {
       setRecordingState('idle');
       setExportStatus(
         finalBlob === rawBlob
-          ? `Saved raw ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`
-          : `Saved fixed ${EXPORT_WIDTH}x${EXPORT_HEIGHT} webm`,
+          ? `Saved raw ${exportDimensions.width}x${exportDimensions.height} webm`
+          : `Saved fixed ${exportDimensions.width}x${exportDimensions.height} webm`,
       );
     });
 
@@ -599,6 +667,7 @@ function App() {
       title: sessionTitle,
       messages: renderedMessages,
       bubbleFontSize,
+      exportRatio,
     });
     drawLoop();
     recorder.start(1000);
@@ -861,6 +930,9 @@ function App() {
                 onUndo={undoLastMessage}
                 onReset={resetSession}
                 onModeChange={setSpeakerMode}
+                exportRatio={exportRatio}
+                exportRatioOptions={EXPORT_RATIOS}
+                onExportRatioChange={changeExportRatio}
                 onDecreaseBubbleFontSize={() => changeBubbleFontSize(-1)}
                 onIncreaseBubbleFontSize={() => changeBubbleFontSize(1)}
                 onStartExport={handleRecordButtonClick}
@@ -948,30 +1020,47 @@ function App() {
           </section>
 
           <section className="chat-stage">
-            <div className="crop-frame">
-              <span className="crop-marker crop-marker-top-left" aria-hidden="true" />
-              <span className="crop-marker crop-marker-top-right" aria-hidden="true" />
-              <span className="crop-marker crop-marker-bottom-left" aria-hidden="true" />
-              <span className="crop-marker crop-marker-bottom-right" aria-hidden="true" />
-              {recordingState === 'recording' ? (
-                <span className="recording-indicator">·REC</span>
-              ) : null}
-              {recordingState === 'paused' ? (
-                <span className="recording-indicator recording-indicator-paused">·PAUSE</span>
-              ) : null}
-              <div className="chat-frame">
-                <div className="chat-title-bar">
-                  <p className="chat-title">{sessionTitle || 'Untitled Session'}</p>
-                </div>
-                <div className="chat-shell" ref={listRef}>
-                  {renderedMessages.map((message) => (
-                    <ChatMessage
-                      key={message.id}
-                      message={message}
-                      isActive={activeMessageId === message.id}
-                      onSeek={null}
-                    />
-                  ))}
+            <div
+              className="preview-scale-frame"
+              style={{
+                '--preview-stage-width': `${previewStageConfig.previewWidth}px`,
+                '--preview-stage-height': `${previewStageConfig.previewHeight}px`,
+                '--preview-frame-width': `${previewStageConfig.previewWidth * previewScale}px`,
+                '--preview-frame-height': `${previewStageConfig.previewHeight * previewScale}px`,
+                '--preview-scale': previewScale,
+              }}
+            >
+              <div
+                className="preview-stage"
+                style={{
+                  '--crop-boundary-top': `${previewCropBoundaryTop}px`,
+                  '--crop-boundary-height': `${exportRatioConfig.previewHeight}px`,
+                }}
+              >
+                <span className="crop-marker crop-marker-top-left" aria-hidden="true" />
+                <span className="crop-marker crop-marker-top-right" aria-hidden="true" />
+                <span className="crop-marker crop-marker-bottom-left" aria-hidden="true" />
+                <span className="crop-marker crop-marker-bottom-right" aria-hidden="true" />
+                {recordingState === 'recording' ? (
+                  <span className="recording-indicator">·REC</span>
+                ) : null}
+                {recordingState === 'paused' ? (
+                  <span className="recording-indicator recording-indicator-paused">·PAUSE</span>
+                ) : null}
+                <div className="chat-frame">
+                  <div className="chat-title-bar">
+                    <p className="chat-title">{sessionTitle || 'Untitled Session'}</p>
+                  </div>
+                  <div className="chat-shell" ref={listRef}>
+                    {renderedMessages.map((message) => (
+                      <ChatMessage
+                        key={message.id}
+                        message={message}
+                        isActive={activeMessageId === message.id}
+                        onSeek={null}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -989,8 +1078,8 @@ function App() {
         <canvas
           ref={exportCanvasRef}
           className="export-canvas"
-          width={EXPORT_WIDTH}
-          height={EXPORT_HEIGHT}
+          width={exportDimensions.width}
+          height={exportDimensions.height}
           aria-hidden="true"
         />
       </section>

@@ -19,11 +19,13 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
 
 input,
+select,
 textarea {
   border: none;
 }
@@ -55,9 +57,9 @@ button:disabled {
 
 .workspace-grid {
   display: grid;
-  width: min(100%, 1310px);
+  width: min(100%, 1510px);
   margin: 0 auto;
-  grid-template-columns: minmax(560px, 690px) minmax(432px, 576px);
+  grid-template-columns: minmax(560px, 690px) minmax(432px, 768px);
   gap: clamp(28px, 3vw, 44px);
   align-items: start;
   justify-content: center;
@@ -198,44 +200,64 @@ button:disabled {
 
 .compact-settings-row {
   display: grid;
-  grid-template-columns: minmax(360px, 1.35fr) minmax(236px, 0.9fr);
-  gap: 12px;
+  grid-template-columns: minmax(170px, 0.85fr) minmax(210px, 1fr) minmax(132px, 0.65fr);
+  gap: 10px;
   margin-top: 10px;
 }
 
 .mode-row {
   display: grid;
-  grid-template-columns: 108px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
-  gap: 14px;
+  gap: 8px;
   margin-top: 0;
 }
 
 .bubble-font-row {
   display: grid;
-  grid-template-columns: 94px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 0;
+}
+
+.export-ratio-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.ratio-select {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 30px 7px 10px;
+  border: 1px solid #c8d0dc;
+  border-radius: 11px;
+  background: #fff;
+  color: #14213d;
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .mode-label {
   color: #52606d;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   font-weight: 600;
 }
 
 .mode-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .font-size-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .font-size-value {
@@ -249,6 +271,13 @@ button:disabled {
   background: #14213d;
   color: white;
   border-color: #14213d;
+}
+
+.compact-settings-row .mode-button {
+  min-height: 34px;
+  padding: 7px 9px;
+  border-radius: 11px;
+  font-size: 0.86rem;
 }
 
 .queue-panel {
@@ -414,7 +443,9 @@ button:disabled {
 }
 
 .chat-frame {
-  width: 100%;
+  width: auto;
+  height: min(100%, 768px);
+  max-width: 100%;
   padding: 26px;
   border-radius: 41px;
   background: var(--surface-background);
@@ -423,10 +454,20 @@ button:disabled {
   flex-direction: column;
 }
 
-.crop-frame {
+.preview-scale-frame {
+  width: var(--preview-frame-width, var(--preview-stage-width, 576px));
+  height: var(--preview-frame-height, var(--preview-stage-height, 1024px));
+  flex-shrink: 0;
+}
+
+.preview-stage {
   position: relative;
-  width: min(100%, 576px);
-  aspect-ratio: 3 / 4;
+  display: grid;
+  width: var(--preview-stage-width, 576px);
+  height: var(--preview-stage-height, 1024px);
+  place-items: center;
+  transform: scale(var(--preview-scale, 1));
+  transform-origin: top left;
 }
 
 .crop-marker {
@@ -442,21 +483,21 @@ button:disabled {
 }
 
 .crop-marker-top-left {
-  top: var(--crop-marker-offset);
+  top: calc(var(--crop-boundary-top, 0px) + var(--crop-marker-offset));
   left: var(--crop-marker-offset);
   border-top: var(--crop-marker-weight) solid;
   border-left: var(--crop-marker-weight) solid;
 }
 
 .crop-marker-top-right {
-  top: var(--crop-marker-offset);
+  top: calc(var(--crop-boundary-top, 0px) + var(--crop-marker-offset));
   right: var(--crop-marker-offset);
   border-top: var(--crop-marker-weight) solid;
   border-right: var(--crop-marker-weight) solid;
 }
 
 .crop-marker-bottom-left {
-  bottom: var(--crop-marker-offset);
+  top: calc(var(--crop-boundary-top, 0px) + var(--crop-boundary-height, 1024px) - var(--crop-marker-size) + var(--crop-marker-offset));
   left: var(--crop-marker-offset);
   border-bottom: var(--crop-marker-weight) solid;
   border-left: var(--crop-marker-weight) solid;
@@ -464,7 +505,7 @@ button:disabled {
 
 .crop-marker-bottom-right {
   right: var(--crop-marker-offset);
-  bottom: var(--crop-marker-offset);
+  top: calc(var(--crop-boundary-top, 0px) + var(--crop-boundary-height, 1024px) - var(--crop-marker-size) + var(--crop-marker-offset));
   border-right: var(--crop-marker-weight) solid;
   border-bottom: var(--crop-marker-weight) solid;
 }
@@ -657,10 +698,6 @@ button:disabled {
 
   .chat-frame {
     padding: 16px;
-  }
-
-  .crop-frame {
-    width: min(100%, 560px);
   }
 
   .audio-upload {

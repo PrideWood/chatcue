@@ -13,6 +13,9 @@ function PlayerControls({
   onUndo,
   onReset,
   onModeChange,
+  exportRatio,
+  exportRatioOptions,
+  onExportRatioChange,
   onDecreaseBubbleFontSize,
   onIncreaseBubbleFontSize,
   onStartExport,
@@ -59,7 +62,7 @@ function PlayerControls({
 
       <div className="compact-settings-row">
         <div className="mode-row">
-          <span className="mode-label">Speaker Mode</span>
+          <span className="mode-label">Mode</span>
           <div className="mode-switch">
             <button
               type="button"
@@ -79,7 +82,7 @@ function PlayerControls({
         </div>
 
         <div className="bubble-font-row">
-          <span className="mode-label">Bubble Text</span>
+          <span className="mode-label">Size</span>
           <div className="font-size-controls">
             <button
               type="button"
@@ -99,6 +102,25 @@ function PlayerControls({
               A+
             </button>
           </div>
+        </div>
+
+        <div className="export-ratio-row">
+          <label className="mode-label" htmlFor="export-ratio-select">
+            Ratio
+          </label>
+          <select
+            id="export-ratio-select"
+            className="ratio-select"
+            value={exportRatio}
+            disabled={isRecordingSessionActive}
+            onChange={(event) => onExportRatioChange(event.target.value)}
+          >
+            {exportRatioOptions.map((ratio) => (
+              <option key={ratio.value} value={ratio.value}>
+                {ratio.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

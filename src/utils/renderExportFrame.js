@@ -1,9 +1,25 @@
-export const EXPORT_WIDTH = 1620;
-export const EXPORT_HEIGHT = 2160;
+const CONTENT_PREVIEW_WIDTH = 576;
+const CONTENT_PREVIEW_HEIGHT = 768;
+const EXPORT_SCALE = 1620 / CONTENT_PREVIEW_WIDTH;
 
-const PREVIEW_WIDTH = 576;
-const PREVIEW_HEIGHT = 768;
-const EXPORT_SCALE = EXPORT_WIDTH / PREVIEW_WIDTH;
+export const DEFAULT_EXPORT_RATIO = '3:4';
+export const EXPORT_RATIOS = [
+  { value: '3:4', label: '3:4', previewWidth: 576, previewHeight: 768 },
+  { value: '9:16', label: '9:16', previewWidth: 576, previewHeight: 1024 },
+];
+
+export function getExportRatioConfig(exportRatio = DEFAULT_EXPORT_RATIO) {
+  return EXPORT_RATIOS.find((ratio) => ratio.value === exportRatio) || EXPORT_RATIOS[0];
+}
+
+export function getExportDimensions(exportRatio = DEFAULT_EXPORT_RATIO) {
+  const ratio = getExportRatioConfig(exportRatio);
+
+  return {
+    width: Math.round(ratio.previewWidth * EXPORT_SCALE),
+    height: Math.round(ratio.previewHeight * EXPORT_SCALE),
+  };
+}
 
 const COLORS = {
   background: '#eceef1',
@@ -119,19 +135,23 @@ function getTextWidth(ctx, lines, font) {
   return Math.max(0, ...lines.map((line) => ctx.measureText(line).width));
 }
 
-export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
+export function renderExportFrame(canvas, { title, messages, bubbleFontSize, exportRatio }) {
   const ctx = canvas.getContext('2d', { alpha: false });
+  const exportDimensions = getExportDimensions(exportRatio);
+  const exportRatioConfig = getExportRatioConfig(exportRatio);
+  const contentOffsetX = (exportRatioConfig.previewWidth - CONTENT_PREVIEW_WIDTH) / 2;
+  const contentOffsetY = (exportRatioConfig.previewHeight - CONTENT_PREVIEW_HEIGHT) / 2;
 
   if (!ctx) {
     return;
   }
 
-  if (canvas.width !== EXPORT_WIDTH) {
-    canvas.width = EXPORT_WIDTH;
+  if (canvas.width !== exportDimensions.width) {
+    canvas.width = exportDimensions.width;
   }
 
-  if (canvas.height !== EXPORT_HEIGHT) {
-    canvas.height = EXPORT_HEIGHT;
+  if (canvas.height !== exportDimensions.height) {
+    canvas.height = exportDimensions.height;
   }
 
   const layout = {
@@ -166,21 +186,23 @@ export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
   layout.speakerFont = `700 ${layout.speakerFontSize}px "Avenir Next", "PingFang SC", "Helvetica Neue", sans-serif`;
   layout.textFont = `500 ${layout.textFontSize}px "Avenir Next", "PingFang SC", "Helvetica Neue", sans-serif`;
   layout.translationFont = `400 ${layout.translationFontSize}px "Avenir Next", "PingFang SC", "Helvetica Neue", sans-serif`;
-  layout.contentWidth = PREVIEW_WIDTH - layout.framePadding * 2 - layout.shellPaddingX * 2;
+  layout.contentWidth = CONTENT_PREVIEW_WIDTH - layout.framePadding * 2 - layout.shellPaddingX * 2;
   layout.bubbleMaxWidth = layout.contentWidth * 0.82;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
-  ctx.clearRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
+  ctx.clearRect(0, 0, exportDimensions.width, exportDimensions.height);
   ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
 
   ctx.fillStyle = COLORS.background;
-  ctx.fillRect(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+  ctx.fillRect(0, 0, exportRatioConfig.previewWidth, exportRatioConfig.previewHeight);
+
+  ctx.translate(contentOffsetX, contentOffsetY);
 
   const titleBarX = layout.framePadding;
   const titleBarY = layout.framePadding;
-  const titleBarWidth = PREVIEW_WIDTH - layout.framePadding * 2;
+  const titleBarWidth = CONTENT_PREVIEW_WIDTH - layout.framePadding * 2;
   const titleBarHeight = layout.titlePaddingY * 2 + layout.titleLineHeight;
 
   roundedRect(ctx, titleBarX, titleBarY, titleBarWidth, titleBarHeight, layout.titleRadius);
@@ -191,14 +213,14 @@ export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
   ctx.font = layout.titleFont;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(title || 'Untitled Session', PREVIEW_WIDTH / 2, titleBarY + titleBarHeight / 2);
+  ctx.fillText(title || 'Untitled Session', CONTENT_PREVIEW_WIDTH / 2, titleBarY + titleBarHeight / 2);
 
   const shellTop = titleBarY + titleBarHeight + layout.titleMarginBottom;
-  const shellBottom = PREVIEW_HEIGHT - layout.framePadding;
+  const shellBottom = CONTENT_PREVIEW_HEIGHT - layout.framePadding;
   const listTop = shellTop + layout.shellPaddingTop;
   const listBottom = shellBottom - layout.shellPaddingBottom;
   const messageLeft = layout.framePadding + layout.shellPaddingX;
-  const messageRight = PREVIEW_WIDTH - layout.framePadding - layout.shellPaddingX;
+  const messageRight = CONTENT_PREVIEW_WIDTH - layout.framePadding - layout.shellPaddingX;
   const measuredMessages = messages.map((message) => ({
     message,
     metrics: measureMessage(ctx, message, layout),
@@ -215,7 +237,7 @@ export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, shellTop, PREVIEW_WIDTH, shellBottom - shellTop);
+  ctx.rect(0, shellTop, CONTENT_PREVIEW_WIDTH, shellBottom - shellTop);
   ctx.clip();
 
   measuredMessages.forEach(({ message, metrics }) => {
@@ -291,6 +313,6 @@ export function renderExportFrame(canvas, { title, messages, bubbleFontSize }) {
     fade.addColorStop(0, COLORS.background);
     fade.addColorStop(1, 'rgba(236, 238, 241, 0)');
     ctx.fillStyle = fade;
-    ctx.fillRect(0, shellTop, PREVIEW_WIDTH, 53);
+    ctx.fillRect(0, shellTop, CONTENT_PREVIEW_WIDTH, 53);
   }
 }
